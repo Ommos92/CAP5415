@@ -4,7 +4,7 @@ import cv2
 import PIL
 import matplotlib.pyplot as plt
 import scipy.signal 
-    
+from skimage import data, filters
 
 class cannyEdgeDetection():
     """
@@ -182,8 +182,9 @@ class cannyEdgeDetection():
         plt.imshow(Gradient, cmap ='gray')
         plt.show()
         #Calculate slope of gradient
-        theta = (180/math.pi) * (np.arctan2(Xresult,Yresult))
-        theta[theta< 0] += 180
+        #theta = (180/math.pi) * (np.arctan2(Xresult,Yresult))
+        #theta[theta < 0] += 180
+        theta = np.arctan2(Xresult,Yresult)
         #plt.imshow(theta, cmap ='gray')
         #plt.show()
         return Gradient, theta
@@ -196,31 +197,32 @@ class cannyEdgeDetection():
         3. Check if the pixel in the same direction has a higher intensity than the current pix
         4. Return the image 
         """
+        
         G, theta = self.derivativeCalculation()
+        #convert from rads to degrees and offset to +/- pi
+        #theta = theta * 180. / np.pi
+        theta[theta < 0] += np.pi/2
+        
         #Create empty array for looping throguh image
         M, N = G.shape
+        Z = np.zeros((M,N), dtype=np.int32)
         print("Row: {}, Column {}". format(M,N))
 
-
-
-
         #Loop through all points in the image
-        for i in range(M):
-            for j in range(N):
+        for i in range(1,M-1):
+            for j in range(1,N-1):
                 #Find the neighboring pixels in the direction along theta vector
                 #XY prime
                 xp1 = math.cos(theta[i,j])
                 yp1 = math.sin(theta[i,j])
-                #XY double prime
-                #xp2 = math.cos(-theta[i,j])
-                #yp2 = math.sin(-theta[i,j])
-
+                '''
+                #This alogirthm does not account for 0,0 case 
                 #interpolate closest pixel
                 if  -0.5 < xp1 < 0.5:
                     col_xp1 = 0
-                elif xp1 <= -0.5:
+                elif xp1 < -0.5:
                     col_xp1 = -1
-                elif xp1 >= 0.5:
+                elif xp1 > 0.5:
                     col_xp1 = 1
 
                 if -0.5 < yp1 < 0.5:
@@ -229,6 +231,28 @@ class cannyEdgeDetection():
                     row_yp1 = -1
                 elif yp1 >= 0.5:
                     row_yp1 = 1
+                '''
+
+                if (xp1 < -0.5) and (yp1 < -0.5):
+                    #South West
+                    col_xp1 = -1
+                    row_yp1 = -1
+                
+                elif (-0.5 <= xp1 <= 0.5) and (yp1 < -0.5):
+                    #West
+                    col_xp1 = -1
+                    row_yp1 = 0
+
+                elif (xp1 > 0.5) and (yp1 < -0.5):
+                    #North West
+                    col_xp1 = -1
+                    row_yp1 = 1
+                
+                elif (xp1 < -0.5) and (-0.5 <= yp1 <= 0.5):
+                    #South
+                    col_xp1 = 0
+                    row_yp1 = -1
+                
 
                 #Calculate the pix intensity for both points (odd function)
                 try:
@@ -236,40 +260,126 @@ class cannyEdgeDetection():
                     intensityP2 = G[i - col_xp1, j - row_yp1]
                     intensityOrigin = G[i,j]
                     
-                    if intensityOrigin < intensityP1 and intensityP2:
-                        G[i,j] = 0
-                
+                    if (intensityOrigin >= intensityP1) and (intensityOrigin >= intensityP2):
+                        Z[i,j] = G[i,j]
+                    else:
+                        Z[i,j] = 0
                 except:
                     pass
                 
         if(ploten == True):            
-            plt.imshow(G, cmap='gray')
+            plt.imshow(Z, cmap='gray')
             plt.show()
         return G
 
-        def hysteresisThreshold(self,Low_Threshold,High_threshold):
-            print('test')
+
+    def hysteresisThreshold(self,Low_Threshold,High_threshold):
+        
+        res = self.nonmaxSuppression()
+
+        hyst = filters.apply_hysteresis_threshold(res, Low_Threshold, High_threshold)
+        plt.imshow(hyst,cmap='gray')
+        plt.show()
+        return hyst
+    
+    
+    '''
+    These are examples for how it might be done
+    '''
+    def non_max_suppression(self):
+        img, D = self.derivativeCalculation()
+        M, N = img.shape
+        Z = np.zeros((M,N), dtype=np.int32)
+        angle = D * 180. / np.pi
+        angle[angle < 0] += 180
+
+        
+        for i in range(1,M-1):
+            for j in range(1,N-1):
+                try:
+                    q = 255
+                    r = 255
+                    
+                #angle 0
+                    if (0 <= angle[i,j] < 22.5) or (157.5 <= angle[i,j] <= 180):
+                        q = img[i, j+1]
+                        r = img[i, j-1]
+                    #angle 45
+                    elif (22.5 <= angle[i,j] < 67.5):
+                        q = img[i+1, j-1]
+                        r = img[i-1, j+1]
+                    #angle 90
+                    elif (67.5 <= angle[i,j] < 112.5):
+                        q = img[i+1, j]
+                        r = img[i-1, j]
+                    #angle 135
+                    elif (112.5 <= angle[i,j] < 157.5):
+                        q = img[i-1, j-1]
+                        r = img[i+1, j+1]
+
+                    if (img[i,j] >= q) and (img[i,j] >= r):
+                        Z[i,j] = img[i,j]
+                    else:
+                        Z[i,j] = 0
+
+                except IndexError as e:
+                    pass
+        plt.imshow(Z,cmap='gray')
+        plt.show()
+        return Z
+
+    def threshold(self, lowThresholdRatio=0.1, highThresholdRatio=0.3):
+        img = self.non_max_suppression()
+        highThreshold = img.max() * highThresholdRatio;
+        lowThreshold = highThreshold * lowThresholdRatio;
+        
+        M, N = img.shape
+        res = np.zeros((M,N), dtype=np.int32)
+        
+        weak = np.int32(25)
+        strong = np.int32(255)
+        
+        strong_i, strong_j = np.where(img >= highThreshold)
+        zeros_i, zeros_j = np.where(img < lowThreshold)
+        
+        weak_i, weak_j = np.where((img <= highThreshold) & (img >= lowThreshold))
+        
+        res[strong_i, strong_j] = strong
+        res[weak_i, weak_j] = weak
+        
+        return (res, weak, strong)
+    ##hysteresis example
+    def hysteresis(self):
+        img, weak, strong = self.threshold()
+        plt.imshow(img)
+        plt.plot()
+        M, N = img.shape  
+        for i in range(1, M-1):
+            for j in range(1, N-1):
+                if (img[i,j] == weak):
+                    try:
+                        if ((img[i+1, j-1] == strong) or (img[i+1, j] == strong) or (img[i+1, j+1] == strong)
+                            or (img[i, j-1] == strong) or (img[i, j+1] == strong)
+                            or (img[i-1, j-1] == strong) or (img[i-1, j] == strong) or (img[i-1, j+1] == strong)):
+                            img[i, j] = strong
+                        else:
+                            img[i, j] = 0
+                    except IndexError as e:
+                        pass
+        plt.imshow(img, cmap='gray')
+        plt.show()
+        return img
             
+    
 
-
-
-
-                
-
-
-
-        
-        
-
-
-       
-       
-
-imgPath = r'C:/MastersCourses/gitWorkspace/CAP5415/CAP5415/Project1/images/img1.jpg'
+imgPath = r'C:/MastersCourses/gitWorkspace/CAP5415/CAP5415/Project1/images/img6.jpg'
 
 minVal = 0
 maxVal = 0
-kSize = 11
-std = 3
+kSize = 5
+std = 1.2
 #plt.imshow(imgPath,cmap="gray")
 cannyEdgeDetection(imgPath,kSize,std,minVal,maxVal).nonmaxSuppression()
+cannyEdgeDetection(imgPath,kSize,std,minVal,maxVal).non_max_suppression()
+
+

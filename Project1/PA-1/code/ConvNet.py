@@ -8,7 +8,7 @@ class ConvNet(nn.Module):
         super(ConvNet, self).__init__()
         
         # Define various layers here, such as in the tutorial example
-        # self.conv1 = nn.Conv2D(...)
+        # self.conv1 = nn.Conv2aD(...)
         
         # This will select the forward pass function based on mode for the ConvNet.
         # Based on the question, you have 5 modes available for step 1 to 5.
@@ -39,7 +39,17 @@ class ConvNet(nn.Module):
         # Uncomment the following return stmt once method implementation is done.
         # return  fcl
         # Delete line return NotImplementedError() once method is implemented.
-        return NotImplementedError()
+        
+        #First 2D Convolutional layer, taking in 1 input channel
+        # outputting n Convolutional features, with a square kernel size of 3
+        #self.conv1 = nn.Conv2d(in_channels = 1,out_channels=32,kernel_size = 3)
+
+        #Sigmoid Activation layer
+        self.activation = nn.Sigmoid(inplace=True)
+        #First hidden layer
+        self.fc1 = nn.Linear(in_features=84,out_features = 100)
+        self.fcl = nn.Linear(in_features=100,out_features = 10)
+        return self.fcl
 
     # Use two convolutional layers.
     def model_2(self, X):
